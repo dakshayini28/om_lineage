@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "om-lineage"
+version = "0.1.0"
+description = ""
+authors = ["dakshayini28 <21bd1a6702csd@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+sqllineage = "^1.5.4"
+fastapi = "^0.116.1"
+uvicorn = "^0.35.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
