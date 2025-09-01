@@ -16,10 +16,8 @@ def addLineage(results, columnsLineage):
         ColumnLineage(fromColumns=item["fromColumns"], toColumn=item["toColumn"])
         for item in columnsLineage
     ]
-    # print('column_lineage_list',column_lineage_list)
     
     target_fqn = ".".join(columnsLineage[0]["toColumn"].split(".")[:-1])
-    # print('columnsLineage',columnsLineage)
     source_fqns=[]
     for item in columnsLineage:
         for col in item['fromColumns']:
@@ -28,25 +26,29 @@ def addLineage(results, columnsLineage):
             source_fqns.append(source_fqn)
             
     
-    first_source_fqn = list(source_fqns)[0]
-    # print('first_source_fqn',first_source_fqn)
-    # print("results",results["tables"][first_source_fqn])
-    source_id = results["tables"][first_source_fqn]["id"]
-    target_id = results["tables"][target_fqn]["id"]
+    edges = []
+    for source_fqn in set(source_fqns):   # avoid duplicates
+        source_id = results["tables"][source_fqn]["id"]
+        target_id = results["tables"][target_fqn]["id"]
 
-    from_entity = EntityRef(id=source_id)
-    # print("from_entity",from_entity)
-    to_entity = EntityRef(id=target_id)
-    # print("to_entity",to_entity)
-    lineage_details = LineageDetails(columnsLineage=column_lineage_list)
-    # print("lineage_details",lineage_details)
-    edge = Edge(
-        fromEntity=from_entity, 
-        toEntity=to_entity, 
-        lineageDetails=lineage_details
-    )
-    
-    edge_request = EdgeRequest(edge=edge)
+        from_entity = EntityRef(id=source_id)
+        to_entity = EntityRef(id=target_id)
+
+        lineage_details = LineageDetails(
+            columnsLineage=[
+                cl for cl in column_lineage_list 
+                if any(col.startswith(source_fqn) for col in cl.fromColumns)
+            ]
+        )
+
+        edge = Edge(
+            fromEntity=from_entity,
+            toEntity=to_entity,
+            lineageDetails=lineage_details
+        )
+
+        edge_request = EdgeRequest(edge=edge)
+        edges.append(edge_request.model_dump())
     # print("edge_request",edge)
     # print(json.dumps(edge_request.model_dump(), indent=2))
     data= json.dumps(edge_request.model_dump(), indent=2)
@@ -55,15 +57,5 @@ def addLineage(results, columnsLineage):
     # print(data)
     
     return data
-
-    # except Exception as e:
-    #     # Include collected data in the error response for debugging
-    #     return {
-    #         "error": f"Failed to construct EdgeRequest model: {str(e)}", 
-    #         "collected_data": {
-    #             "tables": results.get("tables", {}), 
-    #             "columnsLineage": columnsLineage
-    #         }
-    #     }
     
     
