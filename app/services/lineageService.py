@@ -4,6 +4,7 @@ from ..services.tableDetails import get_table_details, create_table_api,create_e
 from ..services.addLineageEdgeService import addLineage
 from config import fqn_prefix
 from ..models.table import Table, Column
+from fastapi import HTTPException
 
 
 def extract_lineage_and_tables(sql: str):
@@ -13,7 +14,7 @@ def extract_lineage_and_tables(sql: str):
         columnsLineage = []
         lineage = LineageRunner(sql=sql, verbose=True)
         col_lineage = lineage.get_column_lineage()
-        
+        tables_to_process = {} 
 
         for col in col_lineage:
             src = str(col[0])  # left column FQN
@@ -26,7 +27,14 @@ def extract_lineage_and_tables(sql: str):
                 tgt = tgt.replace("<default>", fqn_prefix)
 
             columnsLineage.append({"fromColumns": src, "toColumn": tgt})
-
+            for col_fqn in [src, tgt]:
+                    table_fqn = ".".join(col_fqn.split(".")[:-1])
+                    col_name = col_fqn.split(".")[-1]
+                    
+                    if table_fqn not in tables_to_process:
+                        tables_to_process[table_fqn] = set() 
+                    tables_to_process[table_fqn].add(col_name)
+        
         tables = {}
         for cols in columnsLineage:
             fromcol = cols.get("fromColumns")
@@ -45,10 +53,37 @@ def extract_lineage_and_tables(sql: str):
                     "lineageDetails": {"columnsLineage": []},
                 }
             }
-            # asset = await get_asset_by_fqn(asset_fqn=fromtable)
-            table_payload["edge"]["fromEntity"]["id"] = fromtable
-            # asset = await get_asset_by_fqn(asset_fqn=totable)
-            table_payload["edge"]["toEntity"]["id"] = totable
+            # # asset = await get_asset_by_fqn(asset_fqn=fromtable)
+            # table_payload["edge"]["fromEntity"]["id"] = fromtable
+            # # asset = await get_asset_by_fqn(asset_fqn=totable)
+            # table_payload["edge"]["toEntity"]["id"] = totable
+            
+            # table_payload["edge"]["lineageDetails"]["columnsLineage"] = []
+            # print(fromtable)
+            
+            
+            # print("asset",asset)
+            asset = get_table_details(fromtable)
+            table_payload["edge"]["fromEntity"]["id"] = asset.get("id")
+            for table_fqn, columns in tables_to_process.items():
+                print(f"Processing table: {table_fqn} with columns: {columns}")
+                if table_fqn != totable:
+                    continue
+                try:
+                    asset = get_table_details(table_fqn)
+                    table_payload["edge"]["toEntity"]["id"] = asset.get("id")
+                    print(f"Table {table_fqn} found.")
+                except HTTPException as e:
+                    print(f"Table {table_fqn} not found. Attempting to create it.")
+                    table_name = table_fqn.split(".")[-1]
+                    columns_list = [Column(name=col_name, dataType="STRING") for col_name in columns] #giving fixed val
+                    new_table_model = Table(
+                        name=table_name,
+                        columns=columns_list
+                    )
+                    print(new_table_model)
+                    asset=create_table_api(new_table_model)
+                    table_payload["edge"]["toEntity"]["id"] = asset.get("id")
             
             table_payload["edge"]["lineageDetails"]["columnsLineage"] = []
             for cols in columnsLineage:
@@ -68,7 +103,8 @@ def extract_lineage_and_tables(sql: str):
             payloads.append(table_payload)
         for payload in payloads:
             try:
-                # create_edge(payload)
+                print("payload",payload)
+                create_edge(payload)
                 print("payloads",payload)   
             except Exception as e:
                 print(e)
